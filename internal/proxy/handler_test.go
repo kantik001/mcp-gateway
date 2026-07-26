@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/kantik001/mcp-gateway/internal/config"
 	"github.com/kantik001/mcp-gateway/internal/mcp"
@@ -47,7 +48,7 @@ func TestHTTPAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := proxy.New(&stubRegistry{client: client}, nil, "")
+	h := proxy.New(&stubRegistry{client: client}, nil, "", 0)
 	srv := h.Routes()
 
 	t.Run("health", func(t *testing.T) {
@@ -119,6 +120,34 @@ func TestHTTPAPI(t *testing.T) {
 		}
 	})
 }
+
+func TestToolCallTimeout(t *testing.T) {
+	client := mcp.NewClient("mock", &hangTransport{})
+	h := proxy.New(&stubRegistry{client: client}, nil, "", 50*time.Millisecond)
+	srv := h.Routes()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/servers/mock/tools/echo", bytes.NewReader([]byte(`{"args":{}}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// hangTransport blocks until the request context is canceled.
+type hangTransport struct{}
+
+func (h *hangTransport) Send(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (h *hangTransport) Notify(ctx context.Context, method string, params any) error {
+	return nil
+}
+
+func (h *hangTransport) Close() error { return nil }
 
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

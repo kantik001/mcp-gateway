@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,19 +14,25 @@ import (
 	"github.com/kantik001/mcp-gateway/internal/registry"
 )
 
+const defaultToolCallTimeout = 30 * time.Second
+
 // Handler serves the HTTP proxy API.
 type Handler struct {
-	reg    registry.Registry
-	logger *slog.Logger
-	apiKey string
+	reg             registry.Registry
+	logger          *slog.Logger
+	apiKey          string
+	toolCallTimeout time.Duration
 }
 
 // New creates a proxy Handler.
-func New(reg registry.Registry, logger *slog.Logger, apiKey string) *Handler {
+func New(reg registry.Registry, logger *slog.Logger, apiKey string, toolCallTimeout time.Duration) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{reg: reg, logger: logger, apiKey: apiKey}
+	if toolCallTimeout <= 0 {
+		toolCallTimeout = defaultToolCallTimeout
+	}
+	return &Handler{reg: reg, logger: logger, apiKey: apiKey, toolCallTimeout: toolCallTimeout}
 }
 
 // Routes mounts all HTTP routes on a chi router.
@@ -69,9 +77,11 @@ func (h *Handler) listTools(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	result, err := client.ListTools(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), h.toolCallTimeout)
+	defer cancel()
+	result, err := client.ListTools(ctx)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeError(w, upstreamStatus(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -104,20 +114,35 @@ func (h *Handler) callTool(w http.ResponseWriter, r *http.Request) {
 		body.Args = map[string]any{}
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), h.toolCallTimeout)
+	defer cancel()
+
 	start := time.Now()
-	result, err := client.CallTool(r.Context(), tool, body.Args)
+	result, err := client.CallTool(ctx, tool, body.Args)
 	metrics.ToolCallDuration.WithLabelValues(name, tool).Observe(time.Since(start).Seconds())
 	if err != nil {
 		metrics.ToolCallsTotal.WithLabelValues(name, tool, "error").Inc()
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeError(w, upstreamStatus(err), err.Error())
 		return
 	}
+	// MCP tool-level failures (isError: true) are successful JSON-RPC responses.
+	// Keep HTTP 200 so agents can read content + isError without treating it as a transport fault.
 	status := "ok"
 	if result.IsError {
 		status = "tool_error"
 	}
 	metrics.ToolCallsTotal.WithLabelValues(name, tool, status).Inc()
 	writeJSON(w, http.StatusOK, result)
+}
+
+func upstreamStatus(err error) int {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return http.StatusGatewayTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return http.StatusRequestTimeout
+	}
+	return http.StatusBadGateway
 }
 
 func (h *Handler) optionalAPIKey(next http.Handler) http.Handler {

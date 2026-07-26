@@ -31,6 +31,7 @@ type Config struct {
 	LogLevel            string
 	ConfigPath          string
 	HealthCheckInterval time.Duration
+	ToolCallTimeout     time.Duration
 	APIKey              string
 	Servers             []ServerConfig
 }
@@ -43,6 +44,7 @@ func Load() (*Config, error) {
 		LogLevel:            envOr("LOG_LEVEL", "info"),
 		ConfigPath:          envOr("CONFIG_PATH", "config/servers.yaml"),
 		HealthCheckInterval: 30 * time.Second,
+		ToolCallTimeout:     30 * time.Second,
 		APIKey:              os.Getenv("API_KEY"),
 	}
 
@@ -52,6 +54,14 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid HEALTH_CHECK_INTERVAL: %w", err)
 		}
 		cfg.HealthCheckInterval = d
+	}
+
+	if v := os.Getenv("TOOL_CALL_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TOOL_CALL_TIMEOUT: %w", err)
+		}
+		cfg.ToolCallTimeout = d
 	}
 
 	data, err := os.ReadFile(cfg.ConfigPath)
