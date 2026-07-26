@@ -186,7 +186,7 @@ func (r *MemoryRegistry) Close() error {
 	return firstErr
 }
 
-// StartHealthLoop runs periodic health checks until ctx is cancelled.
+// StartHealthLoop runs periodic health checks until ctx is canceled.
 func StartHealthLoop(ctx context.Context, reg Registry, interval time.Duration, logger *slog.Logger) {
 	if interval <= 0 {
 		interval = 30 * time.Second
