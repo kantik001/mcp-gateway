@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/mcp-gateway ./cmd/server
 
 # Runtime stage — needs Node for npx-based MCP servers
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
