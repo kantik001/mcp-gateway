@@ -1,0 +1,23 @@
+# Binary output
+bin/
+*.exe
+coverage
+coverage.out
+coverage.html
+
+# Env / secrets
+.env
+*.pem
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Test helpers
+**/helper
+**/helper.exe

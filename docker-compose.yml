@@ -1,0 +1,52 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CONFIG_PATH: /app/config/servers.yaml
+      DATABASE_URL: postgres://gateway:gateway@postgres:5432/mcp_gateway?sslmode=disable
+      HEALTH_CHECK_INTERVAL: 30s
+      API_KEY: ${API_KEY:-}
+    volumes:
+      - ./docker/data:/data
+      - ./config/servers.yaml:/app/config/servers.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # Reserved for future persistent registry (unused by MVP in-memory registry).
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+      POSTGRES_DB: mcp_gateway
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d mcp_gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Reserved for future caching (unused by MVP).
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

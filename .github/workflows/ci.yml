@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Test
+        run: go test ./... -count=1
+
+      - name: Coverage (mcp package)
+        run: |
+          go test ./internal/mcp/... -coverprofile=coverage.out
+          go tool cover -func=coverage.out | tee coverage.txt
+          pct=$(go tool cover -func=coverage.out | awk '/total:/ {print $3}' | tr -d '%')
+          awk -v p="$pct" 'BEGIN { if (p+0 < 60) { print "coverage " p "% < 60%"; exit 1 } }'
+
+      - name: Build
+        run: go build -o bin/mcp-gateway ./cmd/server
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+          args: --timeout=5m

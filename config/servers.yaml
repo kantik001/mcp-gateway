@@ -1,0 +1,28 @@
+# Declarative MCP server registry for mcp-gateway.
+# Each entry is started via stdio transport (command + args).
+
+servers:
+  - name: filesystem
+    description: Local filesystem access via MCP
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "/data"
+    enabled: true
+
+  - name: fetch
+    description: HTTP fetch tool for retrieving web content
+    command: uvx
+    args:
+      - "mcp-server-fetch"
+    enabled: true
+
+  - name: sqlite
+    description: SQLite database tools
+    command: uvx
+    args:
+      - "mcp-server-sqlite"
+      - "--db-path"
+      - "/data/example.db"
+    enabled: false
