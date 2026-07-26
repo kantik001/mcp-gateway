@@ -9,6 +9,7 @@ services:
       CONFIG_PATH: /app/config/servers.yaml
       DATABASE_URL: postgres://gateway:gateway@postgres:5432/mcp_gateway?sslmode=disable
       HEALTH_CHECK_INTERVAL: 30s
+      TOOL_CALL_TIMEOUT: ${TOOL_CALL_TIMEOUT:-30s}
       API_KEY: ${API_KEY:-}
     volumes:
       - ./docker/data:/data

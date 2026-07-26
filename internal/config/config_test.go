@@ -27,6 +27,7 @@ servers:
 	t.Setenv("PORT", "9090")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("HEALTH_CHECK_INTERVAL", "15s")
+	t.Setenv("TOOL_CALL_TIMEOUT", "45s")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -40,6 +41,9 @@ servers:
 	}
 	if cfg.HealthCheckInterval.Seconds() != 15 {
 		t.Fatalf("interval=%v", cfg.HealthCheckInterval)
+	}
+	if cfg.ToolCallTimeout.Seconds() != 45 {
+		t.Fatalf("tool timeout=%v", cfg.ToolCallTimeout)
 	}
 	if len(cfg.Servers) != 1 || cfg.Servers[0].Name != "filesystem" {
 		t.Fatalf("servers=%+v", cfg.Servers)

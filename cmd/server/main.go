@@ -37,7 +37,7 @@ func main() {
 	defer cancel()
 	registry.StartHealthLoop(ctx, reg, cfg.HealthCheckInterval, logger)
 
-	h := proxy.New(reg, logger, cfg.APIKey)
+	h := proxy.New(reg, logger, cfg.APIKey, cfg.ToolCallTimeout)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Routes(),

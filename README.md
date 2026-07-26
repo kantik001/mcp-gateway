@@ -1,6 +1,7 @@
 # mcp-gateway
 
 [![CI](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kantik001/mcp-gateway)](https://goreportcard.com/report/github.com/kantik001/mcp-gateway)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0-black)](https://modelcontextprotocol.io/)
@@ -131,6 +132,19 @@ Content-Type: application/json
 }
 ```
 
+### Error semantics
+
+| Situation | HTTP status | Body |
+|-----------|-------------|------|
+| Unknown server | `404` | `{"error":"…"}` |
+| Invalid JSON body | `400` | `{"error":"…"}` |
+| MCP JSON-RPC / transport failure | `502` | `{"error":"…"}` |
+| Per-call timeout (`TOOL_CALL_TIMEOUT`) | `504` | `{"error":"context deadline exceeded"}` |
+| Tool returned `isError: true` | `200` | MCP `CallToolResult` (agent reads `isError`) |
+| Missing / wrong API key | `401` | `{"error":"unauthorized"}` |
+
+Tool-level failures are still successful JSON-RPC responses — the gateway keeps HTTP **200** so clients can inspect `content` and `isError` without conflating them with upstream outages.
+
 ### Optional API key
 
 Set `API_KEY` and send `X-API-Key: <key>` or `Authorization: Bearer <key>`.  
@@ -159,6 +173,7 @@ servers:
 | `CONFIG_PATH` | `config/servers.yaml` | Servers manifest |
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `HEALTH_CHECK_INTERVAL` | `30s` | Background MCP health checks |
+| `TOOL_CALL_TIMEOUT` | `30s` | Per-request timeout for `tools/list` and `tools/call` |
 | `API_KEY` | _(empty)_ | Optional shared secret |
 | `DATABASE_URL` | _(unused in MVP)_ | Reserved for future registry |
 
@@ -166,7 +181,19 @@ See [`.env.example`](.env.example).
 
 ---
 
-## Metrics
+## Operations
+
+### Graceful shutdown
+
+On `SIGINT` / `SIGTERM` the gateway:
+
+1. Cancels the background health-check loop
+2. Stops accepting new HTTP connections (`Shutdown`, 15s budget)
+3. Closes the registry — each MCP stdio subprocess gets a graceful close, then `Kill` after 3s if still alive
+
+Structured logs are JSON via `log/slog`. Every request log includes `request_id` (chi middleware).
+
+### Metrics
 
 | Metric | Type | Labels |
 |--------|------|--------|

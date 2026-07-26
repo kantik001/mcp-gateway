@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial MVP release
+- Per-call MCP timeout via `TOOL_CALL_TIMEOUT` (default `30s`); timeouts return HTTP 504
+- Go Report Card badge and docs for graceful shutdown + error semantics
+- CI build matrix on `ubuntu-latest` and `macos-latest`
+
+### MVP (baseline)
+
 - Stdio MCP client (JSON-RPC 2.0): initialize, tools/list, tools/call
 - In-memory registry with periodic health checks
 - HTTP API: `/health`, `/v1/servers`, tools list/call, `/metrics`
