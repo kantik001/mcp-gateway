@@ -10,8 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Per-call MCP timeout via `TOOL_CALL_TIMEOUT` (default `30s`); timeouts return HTTP 504
-- Go Report Card badge and docs for graceful shutdown + error semantics
+- Docs for graceful shutdown + error semantics
 - CI build matrix on `ubuntu-latest` and `macos-latest`
+
+### Removed
+
+- Go Report Card badge (service sunset July 2026; quality checks covered by golangci-lint in CI)
 
 ### MVP (baseline)
 

@@ -1,7 +1,6 @@
 # mcp-gateway
 
 [![CI](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/kantik001/mcp-gateway)](https://goreportcard.com/report/github.com/kantik001/mcp-gateway)
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0-black)](https://modelcontextprotocol.io/)
