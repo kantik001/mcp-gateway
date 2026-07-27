@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Per-call MCP timeout via `TOOL_CALL_TIMEOUT` (default `30s`); timeouts return HTTP 504
-- Docs for graceful shutdown + error semantics
-- CI build matrix on `ubuntu-latest` and `macos-latest`
-
-### Removed
-
-- Go Report Card badge (service sunset July 2026; quality checks covered by golangci-lint in CI)
+- **OpenTelemetry** distributed tracing (OTLP/HTTP → Jaeger); spans for HTTP → `mcp.tools.*` → `mcp.jsonrpc`
+- Jaeger all-in-one in `docker-compose.yml` (UI `:16686`)
+- `GET /v1/tools/schema` — OpenAI function-calling JSON for agent tool discovery
+- Prometheus `mcp_tool_cost_total{server,tool,tenant}` (MVP token estimate)
+- **gRPC** `grpc.health.v1.Health/Check` on `GRPC_PORT` (default `:8081`)
 
 ### MVP (baseline)
 
@@ -25,5 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker Compose stack (gateway + Postgres + Redis reserved)
 - GitHub Actions CI (test, coverage gate, lint, build)
 - Optional `API_KEY` authentication for `/v1/*`
+- Per-call MCP timeout via `TOOL_CALL_TIMEOUT` (default `30s`); timeouts return HTTP 504
+
+### Removed
+
+- Go Report Card badge (service sunset July 2026; quality checks covered by golangci-lint in CI)
 
 [Unreleased]: https://github.com/kantik001/mcp-gateway/compare/v0.1.0...HEAD
