@@ -61,7 +61,6 @@ func NewWithOptions(reg registry.Registry, logger *slog.Logger, apiKey string, t
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(h.requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(h.optionalAPIKey)
