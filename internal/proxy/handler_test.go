@@ -86,6 +86,27 @@ func TestHTTPAPI(t *testing.T) {
 		}
 	})
 
+	t.Run("tools schema", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/tools/schema", nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Tools []map[string]any `json:"tools"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Tools) == 0 {
+			t.Fatal("expected at least one tool in schema")
+		}
+		if body.Tools[0]["type"] != "function" {
+			t.Fatalf("type=%v", body.Tools[0]["type"])
+		}
+	})
+
 	t.Run("call tool", func(t *testing.T) {
 		payload := []byte(`{"args":{"msg":"hello"}}`)
 		req := httptest.NewRequest(http.MethodPost, "/v1/servers/mock/tools/echo", bytes.NewReader(payload))
@@ -112,11 +133,8 @@ func TestHTTPAPI(t *testing.T) {
 			t.Fatalf("status=%d", rec.Code)
 		}
 		body := rec.Body.String()
-		if !contains(body, "mcp_tool_calls_total") && !contains(body, "mcp_server_up") {
-			// counters may appear after first call; gauge may be absent until register
-			if !contains(body, "go_") {
-				t.Fatalf("unexpected metrics body: %s", body[:min(200, len(body))])
-			}
+		if !contains(body, "mcp_tool_cost_total") && !contains(body, "mcp_tool_calls_total") && !contains(body, "go_") {
+			t.Fatalf("unexpected metrics body: %s", body[:min(200, len(body))])
 		}
 	})
 }

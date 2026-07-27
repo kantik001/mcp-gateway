@@ -14,6 +14,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/kantik001/mcp-gateway/internal/config"
+	"github.com/kantik001/mcp-gateway/internal/grpchealth"
+	"github.com/kantik001/mcp-gateway/internal/otelx"
 	"github.com/kantik001/mcp-gateway/internal/proxy"
 	"github.com/kantik001/mcp-gateway/internal/registry"
 )
@@ -30,14 +32,27 @@ func main() {
 	logger := newLogger(cfg.LogLevel)
 	slog.SetDefault(logger)
 
-	reg := registry.NewMemory(logger)
-	registry.LoadFromConfig(reg, cfg.Servers, logger)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	otelShutdown, err := otelx.Setup(ctx, "mcp-gateway", cfg.OTELEndpoint)
+	if err != nil {
+		logger.Error("otel setup failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Error("otel shutdown error", "error", err)
+		}
+	}()
+
+	reg := registry.NewMemory(logger)
+	registry.LoadFromConfig(reg, cfg.Servers, logger)
 	registry.StartHealthLoop(ctx, reg, cfg.HealthCheckInterval, logger)
 
-	h := proxy.New(reg, logger, cfg.APIKey, cfg.ToolCallTimeout)
+	h := proxy.NewWithOptions(reg, logger, cfg.APIKey, cfg.ToolCallTimeout, cfg.DefaultTenant)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Routes(),
@@ -47,8 +62,14 @@ func main() {
 		IdleTimeout:       90 * time.Second,
 	}
 
+	grpcSrv, err := grpchealth.Start(":"+cfg.GRPCPort, logger)
+	if err != nil {
+		logger.Error("grpc health start failed", "error", err)
+		os.Exit(1)
+	}
+
 	go func() {
-		logger.Info("mcp-gateway listening", "addr", srv.Addr)
+		logger.Info("mcp-gateway listening", "addr", srv.Addr, "grpc", ":"+cfg.GRPCPort)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "error", err)
 			os.Exit(1)
@@ -67,6 +88,7 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("http shutdown error", "error", err)
 	}
+	grpcSrv.Stop()
 	if err := reg.Close(); err != nil {
 		logger.Error("registry close error", "error", err)
 	}

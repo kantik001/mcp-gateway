@@ -33,6 +33,13 @@ var (
 		Name: "mcp_gateway_http_requests_total",
 		Help: "Total HTTP requests handled by the gateway",
 	}, []string{"method", "path", "status"})
+
+	// ToolCostTotal approximates cumulative "cost" (token estimate) per tool call.
+	// MVP: cost ≈ max(1, len(argsJSON)/4 + len(resultJSON)/4). Future: pricing API.
+	ToolCostTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_tool_cost_total",
+		Help: "Approximate cumulative tool-call cost (token estimate) by server, tool, and tenant",
+	}, []string{"server", "tool", "tenant"})
 )
 
 // Handler returns the Prometheus HTTP handler.

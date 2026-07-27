@@ -3,14 +3,19 @@ services:
     build: .
     ports:
       - "${PORT:-8080}:8080"
+      - "${GRPC_PORT:-8081}:8081"
     environment:
       PORT: "8080"
+      GRPC_PORT: "8081"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CONFIG_PATH: /app/config/servers.yaml
       DATABASE_URL: postgres://gateway:gateway@postgres:5432/mcp_gateway?sslmode=disable
       HEALTH_CHECK_INTERVAL: 30s
       TOOL_CALL_TIMEOUT: ${TOOL_CALL_TIMEOUT:-30s}
       API_KEY: ${API_KEY:-}
+      DEFAULT_TENANT: ${DEFAULT_TENANT:-default}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      OTEL_SERVICE_NAME: mcp-gateway
     volumes:
       - ./docker/data:/data
       - ./config/servers.yaml:/app/config/servers.yaml:ro
@@ -19,6 +24,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      jaeger:
+        condition: service_started
+    restart: unless-stopped
+
+  # OpenTelemetry collector UI — view traces at http://localhost:16686
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
     restart: unless-stopped
 
   # Reserved for future persistent registry (unused by MVP in-memory registry).

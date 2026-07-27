@@ -27,12 +27,15 @@ type ServersFile struct {
 // Config is the runtime configuration for the gateway.
 type Config struct {
 	Port                string
+	GRPCPort            string
 	DatabaseURL         string
 	LogLevel            string
 	ConfigPath          string
 	HealthCheckInterval time.Duration
 	ToolCallTimeout     time.Duration
 	APIKey              string
+	OTELEndpoint        string
+	DefaultTenant       string
 	Servers             []ServerConfig
 }
 
@@ -40,12 +43,15 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                envOr("PORT", "8080"),
+		GRPCPort:            envOr("GRPC_PORT", "8081"),
 		DatabaseURL:         envOr("DATABASE_URL", ""),
 		LogLevel:            envOr("LOG_LEVEL", "info"),
 		ConfigPath:          envOr("CONFIG_PATH", "config/servers.yaml"),
 		HealthCheckInterval: 30 * time.Second,
 		ToolCallTimeout:     30 * time.Second,
 		APIKey:              os.Getenv("API_KEY"),
+		OTELEndpoint:        envOr("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		DefaultTenant:       envOr("DEFAULT_TENANT", "default"),
 	}
 
 	if v := os.Getenv("HEALTH_CHECK_INTERVAL"); v != "" {

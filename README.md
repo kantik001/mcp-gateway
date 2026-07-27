@@ -12,9 +12,11 @@
 | | |
 |---|---|
 | **Agent-friendly HTTP** | No custom MCP SDK required on the client — plain JSON + curl |
+| **Tool schema for agents** | `GET /v1/tools/schema` — OpenAI function-calling JSON for dynamic tool discovery |
+| **Observability** | OpenTelemetry traces (Jaeger), Prometheus metrics + per-tenant cost estimate, request IDs |
+| **gRPC health** | `grpc.health.v1.Health/Check` on `:8081` for probes and staff-level infra signal |
 | **Declarative registry** | Declare servers in YAML; gateway starts and watches them |
-| **Observability** | Request IDs, slog JSON logs, `/metrics` (`mcp_tool_calls_total`, `mcp_server_up`) |
-| **Docker-first** | One `docker compose up` brings gateway + sample MCP servers |
+| **Docker-first** | One `docker compose up` brings gateway + Jaeger + sample MCP servers |
 
 ---
 
@@ -72,13 +74,19 @@ docker compose up --build -d
 ```bash
 curl -s http://localhost:8080/health
 curl -s http://localhost:8080/v1/servers
+curl -s http://localhost:8080/v1/tools/schema | head -c 400; echo
 curl -s http://localhost:8080/v1/servers/filesystem/tools
 
 curl -s -X POST http://localhost:8080/v1/servers/filesystem/tools/read_file \
   -H "Content-Type: application/json" \
   -d '{"args":{"path":"/data/README.md"}}'
 
-curl -s http://localhost:8080/metrics | grep -E 'mcp_tool_calls_total|mcp_server_up'
+curl -s http://localhost:8080/metrics | grep -E 'mcp_tool_calls_total|mcp_tool_cost_total|mcp_server_up'
+
+# gRPC health (go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest)
+grpcurl -plaintext localhost:8081 grpc.health.v1.Health/Check
+
+# Traces: http://localhost:16686  (service mcp-gateway)
 ```
 
 Helper script (Linux / macOS / Git Bash):
@@ -107,9 +115,12 @@ Edit `config/servers.yaml` so filesystem roots match your machine when not using
 | `GET` | `/health` | Gateway liveness |
 | `GET` | `/v1/servers` | Registered MCP servers + health |
 | `GET` | `/registry` | Alias of `/v1/servers` |
+| `GET` | `/v1/tools/schema` | All tools as OpenAI function-calling JSON Schema |
 | `GET` | `/v1/servers/{name}/tools` | MCP `tools/list` |
 | `POST` | `/v1/servers/{name}/tools/{tool}` | MCP `tools/call` |
 | `GET` | `/metrics` | Prometheus metrics |
+
+gRPC (port `GRPC_PORT`, default **8081**): `grpc.health.v1.Health/Check` → `SERVING`.
 
 ### Call a tool
 
@@ -169,18 +180,69 @@ servers:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | HTTP listen port |
+| `GRPC_PORT` | `8081` | gRPC health listen port |
 | `CONFIG_PATH` | `config/servers.yaml` | Servers manifest |
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `HEALTH_CHECK_INTERVAL` | `30s` | Background MCP health checks |
 | `TOOL_CALL_TIMEOUT` | `30s` | Per-request timeout for `tools/list` and `tools/call` |
 | `API_KEY` | _(empty)_ | Optional shared secret |
+| `DEFAULT_TENANT` | `default` | Tenant label when `X-Tenant-ID` is absent |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty / noop)_ | OTLP HTTP endpoint (Compose: `http://jaeger:4318`) |
 | `DATABASE_URL` | _(unused in MVP)_ | Reserved for future registry |
 
 See [`.env.example`](.env.example).
 
 ---
 
-## Operations
+## Observability
+
+### Distributed tracing (OpenTelemetry → Jaeger)
+
+Compose starts **Jaeger all-in-one**. The gateway exports OTLP/HTTP traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
+**Span tree (typical tool call):**
+
+```text
+HTTP POST /v1/servers/{server}/tools/{tool}   (otelhttp)
+  └─ mcp.tools.call
+       └─ mcp.jsonrpc  (tools/call)
+```
+
+Open **http://localhost:16686** → Search service `mcp-gateway` → inspect a recent trace.  
+Logs include `trace_id` next to `request_id` for correlation.
+
+Without an OTLP endpoint (or with `OTEL_SDK_DISABLED=true`) the SDK uses a no-op tracer — unit tests stay offline-friendly.
+
+```mermaid
+sequenceDiagram
+  participant Agent
+  participant Gateway
+  participant MCP as MCP stdio
+  participant Jaeger
+  Agent->>Gateway: POST /v1/servers/fs/tools/read_file
+  Note over Gateway: span mcp.tools.call
+  Gateway->>MCP: JSON-RPC tools/call
+  Note over Gateway: span mcp.jsonrpc
+  MCP-->>Gateway: result
+  Gateway-->>Agent: 200 JSON
+  Gateway-->>Jaeger: OTLP export
+```
+
+### Prometheus metrics
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `mcp_tool_calls_total` | counter | `server`, `tool`, `status` |
+| `mcp_tool_cost_total` | counter | `server`, `tool`, `tenant` |
+| `mcp_server_up` | gauge | `server` |
+| `mcp_tool_call_duration_seconds` | histogram | `server`, `tool` |
+| `mcp_gateway_http_requests_total` | counter | `method`, `path`, `status` |
+
+`mcp_tool_cost_total` is an **MVP token estimate** (`≈ (len(args)+len(result))/4`, min 1). Pass `X-Tenant-ID` (or `?tenant=`) to attribute cost; default tenant is `DEFAULT_TENANT`.
+
+```bash
+curl -s http://localhost:8080/metrics | grep mcp_tool_cost_total
+```
 
 ### Graceful shutdown
 
@@ -188,18 +250,10 @@ On `SIGINT` / `SIGTERM` the gateway:
 
 1. Cancels the background health-check loop
 2. Stops accepting new HTTP connections (`Shutdown`, 15s budget)
-3. Closes the registry — each MCP stdio subprocess gets a graceful close, then `Kill` after 3s if still alive
+3. Stops the gRPC health server
+4. Closes the registry — each MCP stdio subprocess gets a graceful close, then `Kill` after 3s if still alive
 
-Structured logs are JSON via `log/slog`. Every request log includes `request_id` (chi middleware).
-
-### Metrics
-
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mcp_tool_calls_total` | counter | `server`, `tool`, `status` |
-| `mcp_server_up` | gauge | `server` |
-| `mcp_tool_call_duration_seconds` | histogram | `server`, `tool` |
-| `mcp_gateway_http_requests_total` | counter | `method`, `path`, `status` |
+Structured logs are JSON via `log/slog`.
 
 ---
 
@@ -215,12 +269,14 @@ Structured logs are JSON via `log/slog`. Every request log includes `request_id`
 | `make docker-up` | Compose up (detached) |
 
 ```
-cmd/server/           entrypoint
+cmd/server/           entrypoint (HTTP + gRPC health)
 internal/mcp/         JSON-RPC client + stdio transport
 internal/registry/    in-memory registry + health loop
-internal/proxy/       HTTP handlers + middleware
+internal/proxy/       HTTP handlers + middleware + tool schema
 internal/config/      YAML + env loading
 internal/metrics/     Prometheus
+internal/otelx/       OpenTelemetry tracer setup
+internal/grpchealth/  grpc.health.v1 server
 config/servers.yaml   declarative MCP servers
 ```
 
@@ -230,11 +286,11 @@ config/servers.yaml   declarative MCP servers
 
 - [ ] Postgres-backed registry
 - [ ] Redis tool-result cache
-- [ ] OpenTelemetry traces
+- [x] OpenTelemetry traces
 - [ ] SSE / streaming tool results
-- [ ] Multi-tenant API keys
+- [ ] Multi-tenant API keys / real pricing API for `mcp_tool_cost_total`
 
-Not in scope for MVP: Web UI, RAG/LLM orchestration, multi-tenancy.
+Not in scope for MVP: Web UI, RAG/LLM orchestration.
 
 ---
 
