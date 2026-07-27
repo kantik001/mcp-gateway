@@ -12,7 +12,8 @@ type ServerInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Healthy     bool   `json:"healthy"`
-	Command     string `json:"command"`
+	Command     string `json:"command,omitempty"`
+	Runtime     string `json:"runtime,omitempty"`
 	Enabled     bool   `json:"enabled"`
 }
 

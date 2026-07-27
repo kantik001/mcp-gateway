@@ -9,14 +9,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ServerConfig describes a single MCP server process.
+// ServerConfig describes a single MCP server (stdio process or WASM module).
 type ServerConfig struct {
 	Name        string            `yaml:"name" json:"name"`
 	Description string            `yaml:"description" json:"description"`
-	Command     string            `yaml:"command" json:"command"`
-	Args        []string          `yaml:"args" json:"args"`
+	// Runtime selects the backend: ""/"stdio" (default) or "wasm".
+	Runtime     string            `yaml:"runtime" json:"runtime,omitempty"`
+	Command     string            `yaml:"command" json:"command,omitempty"`
+	Args        []string          `yaml:"args" json:"args,omitempty"`
 	Env         map[string]string `yaml:"env" json:"env,omitempty"`
+	// WASM is the path to a .wasm guest when Runtime is "wasm".
+	WASM        string            `yaml:"wasm" json:"wasm,omitempty"`
 	Enabled     bool              `yaml:"enabled" json:"enabled"`
+}
+
+// RuntimeStdio is the default MCP stdio subprocess runtime.
+const RuntimeStdio = "stdio"
+
+// RuntimeWASM runs tools inside wazero (sandboxed guest).
+const RuntimeWASM = "wasm"
+
+// EffectiveRuntime returns the normalized runtime name.
+func (s ServerConfig) EffectiveRuntime() string {
+	switch s.Runtime {
+	case "", RuntimeStdio:
+		return RuntimeStdio
+	case RuntimeWASM:
+		return RuntimeWASM
+	default:
+		return s.Runtime
+	}
 }
 
 // ServersFile is the YAML document under config/servers.yaml.

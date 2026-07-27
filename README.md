@@ -16,6 +16,7 @@
 | **Observability** | OpenTelemetry traces (Jaeger), Prometheus metrics + per-tenant cost estimate, request IDs |
 | **gRPC health** | `grpc.health.v1.Health/Check` on `:8081` for probes and staff-level infra signal |
 | **Declarative registry** | Declare servers in YAML; gateway starts and watches them |
+| **WASM sandbox** | `runtime: wasm` — tools run in wazero (C ABI / WASI), same HTTP API |
 | **Docker-first** | One `docker compose up` brings gateway + Jaeger (+ reserved Postgres/Redis) and sample MCP servers |
 
 ---
@@ -32,7 +33,9 @@ MCP servers speak JSON-RPC over stdio. Agents and orchestrators often speak HTTP
 
 ![MCP Gateway architecture](docs/assets/architecture.png)
 
-**Message flow:** client → HTTP `/v1` → in-memory registry → MCP stdio (`tools/list` / `tools/call`) → JSON response; metrics on `/metrics`, traces via OTLP to Jaeger, gRPC health on `:8081`.
+**Message flow:** client → HTTP `/v1` → in-memory registry → MCP transport (`stdio` subprocess **or** in-process **WASM**/wazero) → JSON response; metrics on `/metrics`, traces via OTLP to Jaeger, gRPC health on `:8081`.
+
+**WASM tools:** declare `runtime: wasm` + `wasm: path/to/guest.wasm` in `config/servers.yaml`. Guests export C ABI functions; the host maps them to MCP `tools/list` / `tools/call`. No second gateway — same REST API. See [`wasm/guests/calculator`](wasm/guests/calculator).
 
 ---
 
@@ -54,6 +57,12 @@ curl -s http://localhost:8080/health
 curl -s http://localhost:8080/v1/servers
 curl -s http://localhost:8080/v1/tools/schema | head -c 400; echo
 curl -s http://localhost:8080/v1/servers/filesystem/tools
+
+# Sandboxed WASM calculator (runtime: wasm)
+curl -s http://localhost:8080/v1/servers/calculator/tools
+curl -s -X POST http://localhost:8080/v1/servers/calculator/tools/add \
+  -H "Content-Type: application/json" \
+  -d '{"args":{"a":2,"b":40}}'
 
 curl -s -X POST http://localhost:8080/v1/servers/filesystem/tools/read_file \
   -H "Content-Type: application/json" \
@@ -262,6 +271,8 @@ config/servers.yaml   declarative MCP servers
 - [ ] Postgres-backed registry
 - [ ] Redis tool-result cache
 - [x] OpenTelemetry traces
+- [x] WASM sandboxed tools (`runtime: wasm` + wazero) — calculator guest
+- [ ] Additional WASM guests (e.g. SQL sandbox)
 - [ ] SSE / streaming tool results
 - [ ] Multi-tenant API keys / real pricing API for `mcp_tool_cost_total`
 

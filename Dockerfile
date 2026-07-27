@@ -24,6 +24,7 @@ WORKDIR /app
 
 COPY --from=builder /out/mcp-gateway /app/mcp-gateway
 COPY config/servers.yaml /app/config/servers.yaml
+COPY wasm/calculator.wasm /app/wasm/calculator.wasm
 COPY docker/data /data
 
 RUN chown -R gateway:gateway /app /data
