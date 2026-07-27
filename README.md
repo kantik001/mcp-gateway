@@ -269,6 +269,21 @@ Not in scope for MVP: Web UI, RAG/LLM orchestration.
 
 ---
 
+## Ecosystem
+
+Part of the [Grounded](https://github.com/kantik001/grounded-llm) polyrepo stack:
+
+| Repo | Role |
+|------|------|
+| [grounded-llm](https://github.com/kantik001/grounded-llm) | Cited RAG + Spec + Retriever `:50051` |
+| [grounded-agent](https://github.com/kantik001/grounded-agent) | ReAct over retrieval + MCP tools |
+| [grounded-guardrails](https://github.com/kantik001/grounded-guardrails) | Token-level verify gRPC `:50052` |
+| [grounded-bench](https://github.com/kantik001/grounded-bench) | Offline NVR / CP / HR / RR |
+| [grounded-vllm](https://github.com/kantik001/grounded-vllm) | vLLM serving-path verify proxy |
+| **mcp-gateway** | HTTP bridge to MCP tools |
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
