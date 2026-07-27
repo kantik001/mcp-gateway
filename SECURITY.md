@@ -67,7 +67,7 @@ Before production:
 - [ ] Set a strong `API_KEY` and require it for `/v1/*`
 - [ ] Restrict filesystem MCP roots to the minimum required paths
 - [ ] Do not expose `/metrics` publicly without a reverse proxy ACL
-- [ ] Change default Postgres credentials in `docker-compose.yml`
+- [ ] Change default Postgres credentials in `docker-compose.yml` (Compose starts Postgres for future use; the gateway does not connect yet)
 - [ ] Run the gateway as a non-root user (Docker image already does)
 - [ ] Review which MCP servers are `enabled: true`
 

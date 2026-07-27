@@ -94,7 +94,7 @@ func (r *MemoryRegistry) Register(server config.ServerConfig) error {
 	return nil
 }
 
-// Get returns a healthy client by name.
+// Get returns a registered client by name (does not gate on the healthy flag).
 func (r *MemoryRegistry) Get(name string) (*mcp.Client, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

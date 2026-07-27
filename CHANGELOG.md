@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation aligned with Go **1.25**, Node **22** runtime image, env vars (`OTEL_SERVICE_NAME`, `OTEL_SDK_DISABLED`), and current API/metrics behavior
+- `OTEL_SERVICE_NAME` is honored (default `mcp-gateway`) for Jaeger / OTLP resource naming
+
 ### Added
 
 - **OpenTelemetry** distributed tracing (OTLP/HTTP → Jaeger); spans for HTTP → `mcp.tools.*` → `mcp.jsonrpc`
@@ -29,4 +34,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Go Report Card badge (service sunset July 2026; quality checks covered by golangci-lint in CI)
 
-[Unreleased]: https://github.com/kantik001/mcp-gateway/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kantik001/mcp-gateway/commits/main

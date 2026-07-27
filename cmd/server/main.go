@@ -35,7 +35,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	otelShutdown, err := otelx.Setup(ctx, "mcp-gateway", cfg.OTELEndpoint)
+	serviceName := envOr("OTEL_SERVICE_NAME", "mcp-gateway")
+	otelShutdown, err := otelx.Setup(ctx, serviceName, cfg.OTELEndpoint)
 	if err != nil {
 		logger.Error("otel setup failed", "error", err)
 		os.Exit(1)
@@ -108,4 +109,11 @@ func newLogger(level string) *slog.Logger {
 		lv = slog.LevelInfo
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lv}))
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }

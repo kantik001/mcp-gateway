@@ -4,7 +4,7 @@ Thanks for helping improve the gateway.
 
 ## Development setup
 
-1. Install Go 1.23+
+1. Install Go **1.25+**
 2. Clone the repo and copy env defaults:
 
    ```bash
@@ -13,7 +13,7 @@ Thanks for helping improve the gateway.
    make test
    ```
 
-3. Optional: install [golangci-lint](https://golangci-lint.run/) for `make lint`
+3. Optional: install [golangci-lint](https://golangci-lint.run/) **v2** for `make lint` (CI uses v2.12.x)
 
 ## Guidelines
 

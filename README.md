@@ -1,7 +1,7 @@
 # mcp-gateway
 
 [![CI](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/kantik001/mcp-gateway/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0-black)](https://modelcontextprotocol.io/)
 
@@ -16,7 +16,7 @@
 | **Observability** | OpenTelemetry traces (Jaeger), Prometheus metrics + per-tenant cost estimate, request IDs |
 | **gRPC health** | `grpc.health.v1.Health/Check` on `:8081` for probes and staff-level infra signal |
 | **Declarative registry** | Declare servers in YAML; gateway starts and watches them |
-| **Docker-first** | One `docker compose up` brings gateway + Jaeger + sample MCP servers |
+| **Docker-first** | One `docker compose up` brings gateway + Jaeger (+ reserved Postgres/Redis) and sample MCP servers |
 
 ---
 
@@ -24,7 +24,7 @@
 
 MCP servers speak JSON-RPC over stdio. Agents and orchestrators often speak HTTP. Bridging that gap usually means embedding an MCP client in every app.
 
-**mcp-gateway** is that bridge once: register MCP servers, call tools over HTTP, scrape metrics, and keep unhealthy servers from taking down the control plane.
+**mcp-gateway** is that bridge once: register MCP servers, call tools over HTTP, scrape metrics, and keep register/health failures from taking down the gateway process. (Tool calls are not blocked solely because a server is marked unhealthy — that flag is for metrics and listing.)
 
 ---
 
@@ -71,6 +71,8 @@ docker compose up --build -d
 # first boot may take 30–60s while MCP packages download
 ```
 
+Runtime image uses **Node 22** (`npx`) and **uv** for sample MCP servers. Builder image is Go **1.25**.
+
 ```bash
 curl -s http://localhost:8080/health
 curl -s http://localhost:8080/v1/servers
@@ -86,10 +88,10 @@ curl -s http://localhost:8080/metrics | grep -E 'mcp_tool_calls_total|mcp_tool_c
 # gRPC health (go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest)
 grpcurl -plaintext localhost:8081 grpc.health.v1.Health/Check
 
-# Traces: http://localhost:16686  (service mcp-gateway)
+# Traces: http://localhost:16686  (service name from OTEL_SERVICE_NAME, default mcp-gateway)
 ```
 
-Helper script (Linux / macOS / Git Bash):
+Helper smoke script (Linux / macOS / Git Bash) — health, servers, schema, tool call, metrics, optional gRPC:
 
 ```bash
 bash scripts/test-mcp.sh
@@ -97,7 +99,7 @@ bash scripts/test-mcp.sh
 
 ### Local (Go)
 
-Requirements: Go 1.23+. For live MCP servers also install Node.js (`npx`) and/or [uv](https://docs.astral.sh/uv/) (`uvx`).
+Requirements: Go **1.25+**. For live MCP servers also install Node.js (`npx`) and/or [uv](https://docs.astral.sh/uv/) (`uvx`).
 
 ```bash
 cp .env.example .env
@@ -112,7 +114,7 @@ Edit `config/servers.yaml` so filesystem roots match your machine when not using
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Gateway liveness |
+| `GET` | `/health` | Gateway liveness → `{"status":"ok"}` |
 | `GET` | `/v1/servers` | Registered MCP servers + health |
 | `GET` | `/registry` | Alias of `/v1/servers` |
 | `GET` | `/v1/tools/schema` | All tools as OpenAI function-calling JSON Schema |
@@ -121,6 +123,10 @@ Edit `config/servers.yaml` so filesystem roots match your machine when not using
 | `GET` | `/metrics` | Prometheus metrics |
 
 gRPC (port `GRPC_PORT`, default **8081**): `grpc.health.v1.Health/Check` → `SERVING`.
+
+**`GET /v1/servers`** returns `{"servers":[{"name","description","healthy","command","enabled"}, …]}`.
+
+**`GET /v1/tools/schema`** returns `{"tools":[{"type":"function","function":{…},"server","mcp_tool"}, …]}`.
 
 ### Call a tool
 
@@ -133,12 +139,11 @@ Content-Type: application/json
 {"args":{"path":"/data/README.md"}}
 ```
 
-**Response**
+**Response** (success; `isError` is omitted when false)
 
 ```json
 {
-  "content": [{"type": "text", "text": "…"}],
-  "isError": false
+  "content": [{"type": "text", "text": "…"}]
 }
 ```
 
@@ -150,6 +155,7 @@ Content-Type: application/json
 | Invalid JSON body | `400` | `{"error":"…"}` |
 | MCP JSON-RPC / transport failure | `502` | `{"error":"…"}` |
 | Per-call timeout (`TOOL_CALL_TIMEOUT`) | `504` | `{"error":"context deadline exceeded"}` |
+| Client canceled the request | `408` | `{"error":"…"}` |
 | Tool returned `isError: true` | `200` | MCP `CallToolResult` (agent reads `isError`) |
 | Missing / wrong API key | `401` | `{"error":"unauthorized"}` |
 
@@ -173,6 +179,9 @@ servers:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
     enabled: true
+    # optional extra process env (KEY: VALUE)
+    # env:
+    #   MY_FLAG: "1"
 ```
 
 **Environment** (overrides):
@@ -188,6 +197,8 @@ servers:
 | `API_KEY` | _(empty)_ | Optional shared secret |
 | `DEFAULT_TENANT` | `default` | Tenant label when `X-Tenant-ID` is absent |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _(empty / noop)_ | OTLP HTTP endpoint (Compose: `http://jaeger:4318`) |
+| `OTEL_SERVICE_NAME` | `mcp-gateway` | Service name in Jaeger / OTLP resource |
+| `OTEL_SDK_DISABLED` | _(unset)_ | Set `true` to force no-op tracer |
 | `DATABASE_URL` | _(unused in MVP)_ | Reserved for future registry |
 
 See [`.env.example`](.env.example).
@@ -208,7 +219,7 @@ HTTP POST /v1/servers/{server}/tools/{tool}   (otelhttp)
        └─ mcp.jsonrpc  (tools/call)
 ```
 
-Open **http://localhost:16686** → Search service `mcp-gateway` → inspect a recent trace.  
+Open **http://localhost:16686** → Search service `mcp-gateway` (or `OTEL_SERVICE_NAME`) → inspect a recent trace.  
 Logs include `trace_id` next to `request_id` for correlation.
 
 Without an OTLP endpoint (or with `OTEL_SDK_DISABLED=true`) the SDK uses a no-op tracer — unit tests stay offline-friendly.
@@ -232,11 +243,11 @@ sequenceDiagram
 
 | Metric | Type | Labels |
 |--------|------|--------|
-| `mcp_tool_calls_total` | counter | `server`, `tool`, `status` |
+| `mcp_tool_calls_total` | counter | `server`, `tool`, `status` (`ok` / `error` / `tool_error`) |
 | `mcp_tool_cost_total` | counter | `server`, `tool`, `tenant` |
 | `mcp_server_up` | gauge | `server` |
 | `mcp_tool_call_duration_seconds` | histogram | `server`, `tool` |
-| `mcp_gateway_http_requests_total` | counter | `method`, `path`, `status` |
+| `mcp_gateway_http_requests_total` | counter | `method`, `path`, `status` (HTTP status **text**, e.g. `OK`, `Not Found`) |
 
 `mcp_tool_cost_total` is an **MVP token estimate** (`≈ (len(args)+len(result))/4`, min 1). Pass `X-Tenant-ID` (or `?tenant=`) to attribute cost; default tenant is `DEFAULT_TENANT`.
 
@@ -266,7 +277,9 @@ Structured logs are JSON via `log/slog`.
 | `make coverage` | Coverage for `internal/mcp` |
 | `make run` | Build and start |
 | `make lint` | golangci-lint |
+| `make tidy` | `go mod tidy` |
 | `make docker-up` | Compose up (detached) |
+| `make docker-down` | Compose down |
 
 ```
 cmd/server/           entrypoint (HTTP + gRPC health)
@@ -277,6 +290,7 @@ internal/config/      YAML + env loading
 internal/metrics/     Prometheus
 internal/otelx/       OpenTelemetry tracer setup
 internal/grpchealth/  grpc.health.v1 server
+pkg/mcp/              public type re-exports (optional for consumers)
 config/servers.yaml   declarative MCP servers
 ```
 
