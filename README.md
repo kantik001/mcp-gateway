@@ -30,33 +30,9 @@ MCP servers speak JSON-RPC over stdio. Agents and orchestrators often speak HTTP
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph clients [Clients]
-    Agent[AI Agent]
-    Curl[curl / scripts]
-  end
+![MCP Gateway architecture](docs/assets/architecture.png)
 
-  subgraph gateway [mcp-gateway]
-    API[HTTP API /v1]
-    Reg[In-memory registry]
-    Metrics["/metrics"]
-  end
-
-  subgraph mcp [MCP servers stdio]
-    FS[filesystem]
-    Fetch[fetch]
-    Other[…]
-  end
-
-  Agent -->|JSON| API
-  Curl -->|JSON| API
-  API --> Reg
-  Reg -->|JSON-RPC 2.0| FS
-  Reg -->|JSON-RPC 2.0| Fetch
-  Reg --> Other
-  API --> Metrics
-```
+**Message flow:** client → HTTP `/v1` → in-memory registry → MCP stdio (`tools/list` / `tools/call`) → JSON response; metrics on `/metrics`, traces via OTLP to Jaeger, gRPC health on `:8081`.
 
 ---
 
