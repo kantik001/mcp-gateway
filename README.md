@@ -200,21 +200,6 @@ Logs include `trace_id` next to `request_id` for correlation.
 
 Without an OTLP endpoint (or with `OTEL_SDK_DISABLED=true`) the SDK uses a no-op tracer — unit tests stay offline-friendly.
 
-```mermaid
-sequenceDiagram
-  participant Agent
-  participant Gateway
-  participant MCP as MCP stdio
-  participant Jaeger
-  Agent->>Gateway: POST /v1/servers/fs/tools/read_file
-  Note over Gateway: span mcp.tools.call
-  Gateway->>MCP: JSON-RPC tools/call
-  Note over Gateway: span mcp.jsonrpc
-  MCP-->>Gateway: result
-  Gateway-->>Agent: 200 JSON
-  Gateway-->>Jaeger: OTLP export
-```
-
 ### Prometheus metrics
 
 | Metric | Type | Labels |
