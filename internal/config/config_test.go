@@ -18,6 +18,11 @@ servers:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
     enabled: true
+  - name: calculator
+    description: wasm calc
+    runtime: wasm
+    wasm: wasm/calculator.wasm
+    enabled: true
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
@@ -45,7 +50,10 @@ servers:
 	if cfg.ToolCallTimeout.Seconds() != 45 {
 		t.Fatalf("tool timeout=%v", cfg.ToolCallTimeout)
 	}
-	if len(cfg.Servers) != 1 || cfg.Servers[0].Name != "filesystem" {
+	if len(cfg.Servers) != 2 {
 		t.Fatalf("servers=%+v", cfg.Servers)
+	}
+	if cfg.Servers[1].EffectiveRuntime() != config.RuntimeWASM || cfg.Servers[1].WASM == "" {
+		t.Fatalf("wasm server=%+v", cfg.Servers[1])
 	}
 }

@@ -21,3 +21,6 @@ vendor/
 # Test helpers
 **/helper
 **/helper.exe
+
+# Rust WASM guests
+wasm/guests/**/target/

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **WASM sandboxed tools** (`runtime: wasm`): wazero host + calculator guest (C ABI `add`/`mul`); same HTTP `/v1/...` API
 - **OpenTelemetry** distributed tracing (OTLP/HTTP → Jaeger); spans for HTTP → `mcp.tools.*` → `mcp.jsonrpc`
 - Jaeger all-in-one in `docker-compose.yml` (UI `:16686`)
 - `GET /v1/tools/schema` — OpenAI function-calling JSON for agent tool discovery

@@ -1,5 +1,5 @@
 # Declarative MCP server registry for mcp-gateway.
-# Each entry is started via stdio transport (command + args).
+# runtime: stdio (default) | wasm
 
 servers:
   - name: filesystem
@@ -26,3 +26,9 @@ servers:
       - "--db-path"
       - "/data/example.db"
     enabled: false
+
+  - name: calculator
+    description: Sandboxed WASM calculator (add/mul) — no FS/network
+    runtime: wasm
+    wasm: wasm/calculator.wasm
+    enabled: true

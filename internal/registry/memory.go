@@ -36,7 +36,7 @@ func NewMemory(logger *slog.Logger) *MemoryRegistry {
 	}
 }
 
-// Register starts an MCP server process, initializes it, and stores the client.
+// Register starts an MCP backend (stdio or WASM), initializes it, and stores the client.
 func (r *MemoryRegistry) Register(server config.ServerConfig) error {
 	if server.Name == "" {
 		return fmt.Errorf("server name is required")
@@ -50,17 +50,7 @@ func (r *MemoryRegistry) Register(server config.ServerConfig) error {
 		return nil
 	}
 
-	env := make([]string, 0, len(server.Env))
-	for k, v := range server.Env {
-		env = append(env, k+"="+v)
-	}
-
-	transport, err := mcp.NewStdioTransport(mcp.StdioConfig{
-		Command: server.Command,
-		Args:    server.Args,
-		Env:     env,
-		Logger:  r.logger.With("mcp_server", server.Name),
-	})
+	transport, err := r.openTransport(server)
 	if err != nil {
 		r.mu.Lock()
 		r.servers[server.Name] = &entry{cfg: server, healthy: false}
@@ -90,8 +80,35 @@ func (r *MemoryRegistry) Register(server config.ServerConfig) error {
 	r.servers[server.Name] = &entry{cfg: server, client: client, healthy: true}
 	r.mu.Unlock()
 	metrics.ServerUp.WithLabelValues(server.Name).Set(1)
-	r.logger.Info("registered mcp server", "name", server.Name)
+	r.logger.Info("registered mcp server", "name", server.Name, "runtime", server.EffectiveRuntime())
 	return nil
+}
+
+func (r *MemoryRegistry) openTransport(server config.ServerConfig) (mcp.Transport, error) {
+	switch server.EffectiveRuntime() {
+	case config.RuntimeWASM:
+		if server.WASM == "" {
+			return nil, fmt.Errorf("wasm runtime requires wasm: path")
+		}
+		return mcp.NewWASMTransport(context.Background(), mcp.WASMConfig{
+			Path:   server.WASM,
+			Name:   server.Name,
+			Logger: r.logger.With("mcp_server", server.Name, "runtime", "wasm"),
+		})
+	case config.RuntimeStdio:
+		env := make([]string, 0, len(server.Env))
+		for k, v := range server.Env {
+			env = append(env, k+"="+v)
+		}
+		return mcp.NewStdioTransport(mcp.StdioConfig{
+			Command: server.Command,
+			Args:    server.Args,
+			Env:     env,
+			Logger:  r.logger.With("mcp_server", server.Name),
+		})
+	default:
+		return nil, fmt.Errorf("unknown runtime %q (want stdio|wasm)", server.Runtime)
+	}
 }
 
 // Get returns a registered client by name (does not gate on the healthy flag).
@@ -119,6 +136,7 @@ func (r *MemoryRegistry) List() []ServerInfo {
 			Description: e.cfg.Description,
 			Healthy:     e.healthy,
 			Command:     e.cfg.Command,
+			Runtime:     e.cfg.EffectiveRuntime(),
 			Enabled:     e.cfg.Enabled,
 		})
 	}
